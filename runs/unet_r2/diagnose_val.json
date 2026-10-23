@@ -1,0 +1,328 @@
+{
+ "checkpoint_epoch": 34,
+ "ice_to_water_by_sic": [
+  {
+   "sic_pct": 10,
+   "ice_px": 34092,
+   "pred_water_pct": 58.75
+  },
+  {
+   "sic_pct": 20,
+   "ice_px": 323100,
+   "pred_water_pct": 47.99
+  },
+  {
+   "sic_pct": 30,
+   "ice_px": 119261,
+   "pred_water_pct": 30.37
+  },
+  {
+   "sic_pct": 40,
+   "ice_px": 67109,
+   "pred_water_pct": 27.46
+  },
+  {
+   "sic_pct": 50,
+   "ice_px": 227907,
+   "pred_water_pct": 21.52
+  },
+  {
+   "sic_pct": 60,
+   "ice_px": 84412,
+   "pred_water_pct": 6.55
+  },
+  {
+   "sic_pct": 70,
+   "ice_px": 44706,
+   "pred_water_pct": 3.71
+  },
+  {
+   "sic_pct": 80,
+   "ice_px": 123589,
+   "pred_water_pct": 0.33
+  },
+  {
+   "sic_pct": 90,
+   "ice_px": 648974,
+   "pred_water_pct": 0.35
+  },
+  {
+   "sic_pct": 100,
+   "ice_px": 2699727,
+   "pred_water_pct": 0.02
+  }
+ ],
+ "sod_recall": [
+  {
+   "class": "water",
+   "recall_all": 0.9517074525626407,
+   "px_all": 8071908,
+   "recall_sic90": 0.0,
+   "px_sic90": 0
+  },
+  {
+   "class": "new",
+   "recall_all": 0.5192160914046057,
+   "px_all": 129709,
+   "recall_sic90": 0.5811331133113311,
+   "px_sic90": 65448
+  },
+  {
+   "class": "young",
+   "recall_all": 0.6680863954439429,
+   "px_all": 330110,
+   "recall_sic90": 0.706552112763034,
+   "px_sic90": 259092
+  },
+  {
+   "class": "thinFY",
+   "recall_all": 0.28933831663453335,
+   "px_all": 253112,
+   "recall_sic90": 0.29848919425053344,
+   "px_sic90": 245101
+  },
+  {
+   "class": "thickFY",
+   "recall_all": 0.5309090173698501,
+   "px_all": 1532886,
+   "recall_sic90": 0.49980018633226364,
+   "px_sic90": 830774
+  },
+  {
+   "class": "old",
+   "recall_all": 0.7353393886397187,
+   "px_all": 2127060,
+   "recall_sic90": 0.793330137361763,
+   "px_sic90": 1948286
+  }
+ ],
+ "thin_fy_by_region": {
+  "NorthEast": {
+   "px": 193862,
+   "pred_pct": {
+    "water": 0.0,
+    "new": 0.0,
+    "young": 0.44,
+    "thinFY": 19.64,
+    "thickFY": 32.27,
+    "old": 47.65
+   }
+  },
+  "SGRDIFOXE": {
+   "px": 41094,
+   "pred_pct": {
+    "water": 0.13,
+    "new": 1.68,
+    "young": 4.16,
+    "thinFY": 82.91,
+    "thickFY": 0.39,
+    "old": 10.72
+   }
+  },
+  "SouthWest": {
+   "px": 18156,
+   "pred_pct": {
+    "water": 5.3,
+    "new": 8.56,
+    "young": 3.84,
+    "thinFY": 5.95,
+    "thickFY": 48.98,
+    "old": 27.37
+   }
+  }
+ },
+ "sic_errors_by_scene": [
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20180702T112340_cis_prep",
+   "water_to_ice": 0.2278697051461266,
+   "ice_to_water": 0.4790717410412099,
+   "water_px": 123044,
+   "ice_px": 98981
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20180827T101129_dmi_prep",
+   "water_to_ice": 0.0,
+   "ice_to_water": 0.012983453133527657,
+   "water_px": 0,
+   "ice_px": 408597
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20181028T114104_cis_prep",
+   "water_to_ice": 0.062012980916675536,
+   "ice_to_water": 0.16408902301018483,
+   "water_px": 798865,
+   "ice_px": 5302
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20181118T120459_cis_prep",
+   "water_to_ice": 0.0,
+   "ice_to_water": 0.0,
+   "water_px": 0,
+   "ice_px": 77347
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20181207T110721_cis_prep",
+   "water_to_ice": 0.0,
+   "ice_to_water": 0.005550180191549928,
+   "water_px": 0,
+   "ice_px": 356565
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20190127T113114_cis_prep",
+   "water_to_ice": 0.0,
+   "ice_to_water": 0.02217140856550494,
+   "water_px": 0,
+   "ice_px": 365606
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20190409T211011_dmi_prep",
+   "water_to_ice": 0.2578768624462825,
+   "ice_to_water": 0.0009003935922478164,
+   "water_px": 244101,
+   "ice_px": 340962
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20200704T111639_cis_prep",
+   "water_to_ice": 0.2518852241790541,
+   "ice_to_water": 0.2758479991839527,
+   "water_px": 124521,
+   "ice_px": 166657
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20201012T175522_dmi_prep",
+   "water_to_ice": 0.08421914722994762,
+   "ice_to_water": 0.00031792387270665755,
+   "water_px": 351654,
+   "ice_px": 355431
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20201211T210921_dmi_prep",
+   "water_to_ice": 0.00897361533846396,
+   "ice_to_water": 0.17819548872180452,
+   "water_px": 1003386,
+   "ice_px": 2660
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20201221T082637_dmi_prep",
+   "water_to_ice": 0.0,
+   "ice_to_water": 0.0,
+   "water_px": 0,
+   "ice_px": 639458
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210116T210919_dmi_prep",
+   "water_to_ice": 0.010811886509032465,
+   "ice_to_water": 0.19507973791568797,
+   "water_px": 989929,
+   "ice_px": 16178
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210202T211845_dmi_prep",
+   "water_to_ice": 0.024855425376674692,
+   "ice_to_water": 0.01182967876866769,
+   "water_px": 166523,
+   "ice_px": 397813
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20210204T080204_dmi_prep",
+   "water_to_ice": 0.22682005494505494,
+   "ice_to_water": 0.003721751990949124,
+   "water_px": 23296,
+   "ice_px": 903338
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20210308T074624_dmi_prep",
+   "water_to_ice": 0.031018361034420017,
+   "ice_to_water": 0.04921710954710234,
+   "water_px": 126409,
+   "ice_px": 833897
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210427T211746_dmi_prep",
+   "water_to_ice": 0.004301979105869737,
+   "ice_to_water": 0.02891142032920414,
+   "water_px": 716182,
+   "ice_px": 94288
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20210523T121414_cis_prep",
+   "water_to_ice": 0.554920277017233,
+   "ice_to_water": 0.0,
+   "water_px": 12418,
+   "ice_px": 7324
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20210531T074627_dmi_prep",
+   "water_to_ice": 0.046277331055896126,
+   "ice_to_water": 0.026378345498783456,
+   "water_px": 138167,
+   "ice_px": 822000
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20210701T082640_dmi_prep",
+   "water_to_ice": 0.9313951219512195,
+   "ice_to_water": 0.032829975251651794,
+   "water_px": 25625,
+   "ice_px": 611758
+  },
+  {
+   "region": "SGRDIFOXE",
+   "scene": "20210714T114034_cis_prep",
+   "water_to_ice": 0.3082227529378272,
+   "ice_to_water": 0.06647129078555156,
+   "water_px": 379362,
+   "ice_px": 199274
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210715T211029_dmi_prep",
+   "water_to_ice": 0.06202599849539469,
+   "ice_to_water": 0.29544974752517617,
+   "water_px": 590188,
+   "ice_px": 175265
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210828T205443_dmi_prep",
+   "water_to_ice": 0.1285166533760091,
+   "ice_to_water": 0.0,
+   "water_px": 457715,
+   "ice_px": 1063
+  },
+  {
+   "region": "SouthWest",
+   "scene": "20210910T101749_dmi_prep",
+   "water_to_ice": 0.04676465308006705,
+   "ice_to_water": 0.0,
+   "water_px": 857806,
+   "ice_px": 0
+  },
+  {
+   "region": "NorthEast",
+   "scene": "20210927T075405_dmi_prep",
+   "water_to_ice": 0.006583099700122094,
+   "ice_to_water": 0.7070457354758962,
+   "water_px": 942717,
+   "ice_px": 50967
+  }
+ ]
+}

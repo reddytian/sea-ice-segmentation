@@ -1,0 +1,42 @@
+{
+  "version": "region_v1",
+  "unit": "region",
+  "test": [
+    "CentralWest",
+    "SGRDIWA",
+    "SouthEast"
+  ],
+  "val": [
+    "NorthEast",
+    "SGRDIFOXE",
+    "SouthWest"
+  ],
+  "train": [
+    "CapeFarewell",
+    "CentralEast",
+    "North",
+    "NorthAndCentralEast",
+    "NorthWest",
+    "Qaanaaq",
+    "SGRDIEA",
+    "SGRDIHA",
+    "SGRDIMID",
+    "SGRDINFLD"
+  ],
+  "expected_scenes": {
+    "train": 75,
+    "val": 24,
+    "test": 24
+  },
+  "report_only_classes": {
+    "FLOE": [
+      6
+    ]
+  },
+  "selection": {
+    "min_px_per_scene": 50000,
+    "worst_class_ratio": 2.566,
+    "feasible_partitions": 214,
+    "uses_model_scores": false
+  }
+}
