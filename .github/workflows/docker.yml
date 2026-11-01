@@ -18,7 +18,7 @@ env:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04          # pinned: ubuntu-latest is moving to Ubuntu 26
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -33,14 +33,15 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Smoke test on a synthetic scene with the real model's channels
+        # Everything runs inside the image just built, so the test does not depend on
+        # the runner's own Python (which refuses pip installs on newer Ubuntu images).
         run: |
-          pip install -q numpy xarray netCDF4 rasterio
-          CH=$(docker run --rm --entrypoint python seaice:ci -c \
-            "import os, torch; b = torch.load(os.environ['SEAICE_MODEL'], weights_only=True); print(','.join(b['channels']))")
           mkdir -p smoke && chmod 777 smoke
-          python tests/fake_scene.py smoke/20210421T082208_dmi_prep.nc --channels "$CH"
+          in_image() { docker run --rm -i --entrypoint python -v "$PWD:/repo" -w /repo seaice:ci "$@"; }
+          CH=$(in_image -c "import os, torch; b = torch.load(os.environ['SEAICE_MODEL'], weights_only=True); print(','.join(b['channels']))")
+          in_image tests/fake_scene.py smoke/20210421T082208_dmi_prep.nc --channels "$CH"
           docker run --rm -v "$PWD/smoke:/data" seaice:ci 20210421T082208_dmi_prep.nc --out out
-          python - <<'PY'
+          in_image - <<'PY'
           import json, rasterio
           meta = json.load(open("smoke/out/20210421T082208_dmi_prep.json"))
           for t, f in meta["outputs"].items():
