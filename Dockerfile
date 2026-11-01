@@ -3,8 +3,10 @@
 #
 #   docker run --rm -v "$PWD:/data" ghcr.io/reddytian/sea-ice-segmentation SCENE.nc --out out/
 #
+# Targets: `cli` (default, the published image) and `lambda` (AWS Lambda, see deploy/aws/).
+# Both share one `base`, so the Lambda function runs exactly the code and model of the CLI.
 # Layers go from least to most frequently changed: PyTorch, model, code.
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -29,6 +31,16 @@ COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 RUN pip install . && rm -rf /build
 
+# ---- AWS Lambda: S3 event -> seaice.aws_lambda.handler (only /tmp is writable there)
+FROM base AS lambda
+RUN pip install "awslambdaric==4.2.3" "boto3==1.43.123"
+ENV HOME=/tmp
+WORKDIR /tmp
+ENTRYPOINT ["python", "-m", "awslambdaric"]
+CMD ["seaice.aws_lambda.handler"]
+
+# ---- command-line image (default target, published to GHCR)
+FROM base AS cli
 RUN useradd --create-home --uid 1000 seaice
 USER seaice
 WORKDIR /data

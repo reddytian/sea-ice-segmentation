@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  seaice-predict on AWS Lambda. Upload an AI4Arctic scene to s3://BUCKET/incoming/SCENE.nc;
+  georeferenced COG maps appear under s3://BUCKET/predictions/SCENE/. Deployed by
+  deploy/aws/deploy.sh, removed by deploy/aws/teardown.sh.
+
+Parameters:
+  ImageUri:
+    Type: String
+    Description: ECR image (by digest) built from the Dockerfile's `lambda` target.
+  AlertEmail:
+    Type: String
+    Description: Address for the monthly cost alert.
+  MonthlyBudgetUSD:
+    Type: Number
+    Default: 20
+  RetentionDays:
+    Type: Number
+    Default: 30
+    Description: Every object in the bucket is deleted this many days after upload.
+
+Resources:
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: read-scenes-write-maps        # nothing else in the account
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${AWS::StackName}-${AWS::AccountId}/incoming/*"
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "arn:aws:s3:::${AWS::StackName}-${AWS::AccountId}/predictions/*"
+
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: AI4Arctic scene in S3 -> sea-ice COG maps in S3 (seaice-predict)
+      PackageType: Image
+      Code: { ImageUri: !Ref ImageUri }
+      Architectures: [arm64]
+      MemorySize: 4096            # also sets the CPU share; a scene needs ~2-3 GB
+      Timeout: 300                # a scene takes ~10 s; cold start adds model loading
+      EphemeralStorage: { Size: 4096 }   # /tmp holds one scene at a time
+      Role: !GetAtt FunctionRole.Arn
+      Environment:
+        Variables:
+          OUTPUT_PREFIX: predictions/
+
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${Function}"
+      RetentionInDays: 14
+
+  S3InvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt Function.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub "arn:aws:s3:::${AWS::StackName}-${AWS::AccountId}"
+      SourceAccount: !Ref AWS::AccountId
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    DependsOn: S3InvokePermission   # S3 checks it may invoke the function when the trigger is set
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-everything
+            Status: Enabled
+            ExpirationInDays: !Ref RetentionDays
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt Function.Arn
+            Filter:                 # outputs go to predictions/, so the function never triggers itself
+              S3Key:
+                Rules:
+                  - { Name: prefix, Value: incoming/ }
+                  - { Name: suffix, Value: .nc }
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${AWS::StackName}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUSD, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 25
+            ThresholdType: PERCENTAGE
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  BucketName:
+    Value: !Ref Bucket
+  FunctionName:
+    Value: !Ref Function
+  Upload:
+    Description: Upload a scene to start a run
+    Value: !Sub "aws s3 cp SCENE.nc s3://${Bucket}/incoming/"
