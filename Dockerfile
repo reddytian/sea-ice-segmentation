@@ -9,6 +9,11 @@ FROM python:3.11-slim
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
+# rasterio's wheel bundles GDAL but links the system libexpat, which the slim image
+# lacks (caught by the CI smoke test: "libexpat.so.1: cannot open shared object file").
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # CPU-only PyTorch: the default Linux wheel would add ~2.5 GB of CUDA libraries.
 # 2.7.1 is the version scripts/check_parity.py was run with on all 24 test scenes.
 ARG TORCH_VERSION=2.7.1
