@@ -9,7 +9,9 @@ AI4Arctic ready-to-train dataset. Built in PyTorch on a MacBook Air (Apple M5, M
 The model is ordinary. The point of this repository is the **evaluation**: a region-held-out
 split chosen from the data, a floor baseline next to every score, metrics that respect how
 ice charts are made, and experiments whose predictions were written down before they ran
--- including two that turned out wrong.
+-- including two that turned out wrong. It also ships as a command-line tool and a container
+that turn a scene into georeferenced maps, checked to reproduce the evaluated model exactly
+([Inference](#inference-from-a-scene-to-a-map)).
 
 ![AutoICE score vs domain-aware score on the test regions](docs/figures/metric_vs_floor.png)
 
@@ -260,6 +262,62 @@ enough for the ice itself to change -- a plausible reason the Day 11 effect, whi
 from tiles 128 px apart in one scene, does not appear at the scene level here. That
 reason is a hypothesis, not tested.
 
+## Inference: from a scene to a map
+
+`seaice-predict` turns an AI4Arctic scene into map-projected Cloud-Optimised GeoTIFFs:
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install .
+seaice-predict SCENE.nc --model seaice_unet_r2.pt --out predictions/
+# or, with nothing installed but Docker:
+docker run --rm -v "$PWD:/data" ghcr.io/reddytian/sea-ice-segmentation:v0.2.0 SCENE.nc --out predictions/
+```
+
+Per scene it writes `<scene>_SIC.tif` (percent), `<scene>_SOD.tif` and `<scene>_FLOE.tif`
+(class codes): single-band uint8 COGs in EPSG:3413 at 400 m, 255 = no data, with an embedded
+colour table and overviews, so they open coloured in QGIS. `<scene>.json` records provenance
+(model SHA-256, training run and its test score), the legend, pixel counts and timings. Land
+and pixels without SAR are no data: the model never saw a label there. A scene takes 6-8 s
+on 4 CPU cores. Output grids are snapped to a global 400 m grid, so maps of the same area from
+different dates line up pixel for pixel.
+
+The input is the AI4Arctic ready-to-train format (calibrated, noise-corrected Sentinel-1 EW
+HH/HV and AMSR2 on the swath). Producing that from raw Sentinel-1 GRD and AMSR2 L1R is upstream
+preprocessing and is not done here.
+
+![seaice-predict output on test scenes, with an independent coastline](docs/figures/deployed_maps.png)
+
+**The deployed model is the evaluated model.** `scripts/export_model.py` writes a bundle of
+weights, input channel order, train-only normalisation and preprocessing constants. It loads
+with `torch.load(weights_only=True)`, so opening a downloaded model cannot run code, and it is
+reloaded after export to check bit-identical outputs. Preprocessing is one module shared by the
+training cache and the CLI (`src/seaice/preprocess.py`), down to the cache's float16 rounding.
+On all 24 test scenes, `scripts/check_parity.py` finds the inputs computed from the raw
+NetCDF bit-identical to the cached arrays behind the test scores, and the CLI's class maps
+equal to the evaluation pipeline's on every pixel ([log](docs/parity_check.txt)). The Docker
+image downloads the bundle from the GitHub release at build time and refuses it unless its
+SHA-256 matches `docker/model.json`; CI runs the image on a synthetic scene before publishing.
+
+**Geolocation had to be measured, not read.** Each file carries a lat/lon grid with no pixel
+index per node, dimension names that turned out to be swapped, and a `flip` attribute (NaN in
+five scenes) that turned out not to matter. `scripts/check_geolocation.py` locates each scene's
+own land mask under every candidate reading and scores it against an independent 1 km
+coastline (GLOBE) ([per-scene results](docs/geolocation_check.jsonl)). Over the 111 scenes with
+land:
+
+- The axis order is unambiguous: one reading wins in 111 of 111 scenes, by at least 0.11 land IoU.
+- Grid rows sit every 250 lines plus one on the last line (the Sentinel-1 annotation spacing),
+  so the row count varies with scene length. They are not spread evenly over the scene:
+  assuming they are would misplace grid rows by more than 1 km in 38 of 123 scenes, and by up
+  to 16 km. The measured layout raises land IoU by more than 0.02 in 32 scenes (by up to 0.25)
+  and lowers it by that much in none.
+- After warping (a thin-plate spline through the grid, which places pixels with a median error
+  of 0.4 px on a synthetic curved swath), the median land IoU is 0.93. The best-fitting shift
+  per scene is 640 m in the median (90th percentile 1.8 km), close to the 1 km resolution of the
+  reference. One group is systematic: DMI scenes with `flip=0` sit about 0.5 km along the line axis
+  and 1.0 km along the sample axis from their best fit (n = 37, ± 0.1 km). The cause is not identified, so no
+  correction is applied.
+
 ## Limitations
 
 - One random seed per configuration; three test regions. Differences below ~0.03 sel90
@@ -273,16 +331,26 @@ reason is a hypothesis, not tested.
 - FLOE 6 (icebergs) is report-only: 68% of its pixels are outside train.
 - The AMSR2 grid origin (cell centre at SAR pixel 25k + 12) is assumed; the spacing is
   verified. An error in the origin is at most half a 2 km cell.
+- The SOD and FLOE heads do not depend on the SIC head, so a pixel can be 0% concentration
+  with an ice type (visible off Iceland in the 2021-04-21 map). Outputs are left as the
+  evaluated model produces them.
+- Geolocation residuals of up to ~2 km remain, including a ~1 km systematic offset in one group
+  of scenes (above).
 
 ## Tests
 
-`pytest -q` runs 21 tests on synthetic data in a few seconds, on CPU, and in CI on every
+`pytest -q` runs 26 tests on synthetic data in a few seconds, on CPU, and in CI on every
 push. They pin down the properties the results depend on: evaluation tiles cover every
 pixel exactly once; flips and rotations keep inputs and labels aligned; AMSR2 is resampled
 at a fixed 25-pixel spacing rather than stretched; masked cross-entropy is exact zero (not
 NaN) on an unlabelled batch; the metrics match direct computation; the leakage-B splits
-differ only in the swapped scenes. Breaking the rotation or the AMSR2 mapping on purpose
-fails the corresponding test.
+differ only in the swapped scenes. For inference: the CLI's tiling reproduces the evaluation
+path pixel for pixel; georeferencing a synthetic curved swath stays within 1 px with no
+systematic shift; the grid layout matches real scene shapes; outputs are COGs with no data
+over land and outside the swath; the model bundle loads with `weights_only=True`. Each of these fails
+when broken on purpose: rotation, AMSR2 mapping, tile padding, evenly spaced grid rows,
+trusting the dimension names, reversed axes, a polynomial warp, a half-pixel offset, a missing
+land mask.
 
 ## Reproduce
 
@@ -306,16 +374,25 @@ python scripts/evaluate.py --run-dir runs/unet_rand --split test
 python scripts/compare_runs.py runs/unet_r2 runs/unet_r3_sar runs/unet_rand
 python scripts/make_figures.py
 python scripts/predict_maps.py --run-dir runs/unet_r2
+# inference
+python scripts/check_geolocation.py                                    # -> docs/geolocation_check.jsonl
+python scripts/export_model.py --run-dir runs/unet_r2 --release v0.2.0 # -> dist/, docker/model.json
+python scripts/check_parity.py --scenes 0                              # every test scene
+seaice-predict ~/dl-local/ai4arctic/scenes/20210421T082208_dmi_prep.nc --model dist/seaice_unet_r2.pt
+python scripts/map_figure.py predictions/
 ```
 
 ```
 src/seaice/   data.py (crops, tiles, class weights)  model.py  losses.py  metrics.py  engine.py
+              preprocess.py (shared by cache and CLI)  georef.py  predict.py (seaice-predict)
 scripts/      corpus_stats  make_split  build_cache  check_data  train  evaluate
               diagnose_val  compare_runs  make_random_split  make_leak_split  make_figures
-              predict_maps
+              predict_maps  inspect_scene  check_geolocation  export_model  check_parity
+              map_figure
 configs/      split files (region, random, leakage B)
+docker/       model download + checksum (model.json written by export_model.py)
 tests/        pytest suite on synthetic data (no download needed)
-docs/figures/ generated by make_figures.py and predict_maps.py
+docs/         figures, geolocation and parity evidence
 ```
 
 ## References

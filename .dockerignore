@@ -1,0 +1,10 @@
+# Whitelist: only what the image needs. Keeps data, runs and caches out of the build context.
+*
+!Dockerfile
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!docker/fetch_model.py
+!docker/model.json
+**/__pycache__

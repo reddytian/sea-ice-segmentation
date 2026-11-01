@@ -1,0 +1,76 @@
+name: docker
+
+# Build the inference image, run it on a synthetic scene, and on a version tag
+# publish it to GitHub Container Registry for linux/amd64 and linux/arm64.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths: ["Dockerfile", ".dockerignore", "docker/**", "src/**", "pyproject.toml", ".github/workflows/docker.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build (amd64, loaded for testing)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: seaice:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test on a synthetic scene with the real model's channels
+        run: |
+          pip install -q numpy xarray netCDF4 rasterio
+          CH=$(docker run --rm --entrypoint python seaice:ci -c \
+            "import os, torch; b = torch.load(os.environ['SEAICE_MODEL'], weights_only=True); print(','.join(b['channels']))")
+          mkdir -p smoke && chmod 777 smoke
+          python tests/fake_scene.py smoke/20210421T082208_dmi_prep.nc --channels "$CH"
+          docker run --rm -v "$PWD/smoke:/data" seaice:ci 20210421T082208_dmi_prep.nc --out out
+          python - <<'PY'
+          import json, rasterio
+          meta = json.load(open("smoke/out/20210421T082208_dmi_prep.json"))
+          for t, f in meta["outputs"].items():
+              with rasterio.open(f"smoke/out/{f}") as src:
+                  assert src.crs.to_epsg() == 3413 and src.tags(ns="IMAGE_STRUCTURE")["LAYOUT"] == "COG"
+                  print(t, src.width, "x", src.height, src.res)
+          print("model", meta["model"]["run"], meta["model"]["sha256"][:12], meta["seconds"])
+          PY
+          docker image ls seaice:ci --format 'image size {{.Size}}'
+
+      - uses: docker/setup-qemu-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish (amd64 + arm64)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=Sea ice maps from Sentinel-1 SAR and AMSR2 (AI4Arctic format)
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha

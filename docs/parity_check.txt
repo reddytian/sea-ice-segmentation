@@ -1,0 +1,26 @@
+# scripts/check_parity.py on all 24 test-split scenes (CPU, torch 2.7.1): raw NetCDF -> seaice-predict inputs vs training cache, bundle vs checkpoint through EvalTiles
+20180122T205424 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (13 s)  OK
+20180424T194715 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20180810T155252 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (8 s)  OK
+20180903T155253 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20181004T154442 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (12 s)  OK
+20190819T153633 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20190831T144652 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20190926T152005 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20191013T152820 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20200124T102428 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (13 s)  OK
+20200312T102427 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (13 s)  OK
+20200805T194819 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20200910T194821 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20200921T164824 SGRDIWA      inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20201029T193925 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20201209T082938 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210129T103213 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210421T082208 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210527T211945 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210802T211140 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210806T194740 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20210908T210253 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (13 s)  OK
+20211017T194742 SouthEast    inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (9 s)  OK
+20211220T102441 CentralWest  inputs identical  class agreement SIC 1.000000  SOD 1.000000  FLOE 1.000000  (13 s)  OK
+PARITY OK

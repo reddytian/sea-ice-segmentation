@@ -22,6 +22,9 @@ Choices and why:
   * Two passes: pass 1 = train statistics, pass 2 = write. Files are written
     to a temp name and renamed, so an interrupted run leaves no half files.
 
+The per-scene transforms live in src/seaice/preprocess.py and are shared with
+inference (seaice.predict), so a deployed model sees exactly these inputs.
+
 Run with --dry-run first: it prints the channels picked from the first scene
 and stops, so a wrong variable guess costs seconds, not a full pass.
 """
@@ -41,12 +44,11 @@ try:
 except ImportError:
     sys.exit("needs xarray: pip install xarray netcdf4")
 
-SAR_DIMS = ("sar_lines", "sar_samples")
-AMSR_DIMS = ("2km_grid_lines", "2km_grid_samples")
-SAR_REQUIRED = ("nersc_sar_primary", "nersc_sar_secondary")
-LABELS = ("SIC", "SOD", "FLOE")
-FILL = 255
-AMSR_SPACING = 25
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from seaice.preprocess import (AMSR_DIMS, AMSR_SPACING, FILL, LABELS, SAR_DIMS,  # noqa: E402,F401
+                               amsr_to_grid, block_centre, block_mean, open_scene,
+                               normalise, scene_inputs, scene_labels)
+from seaice.preprocess import pick_channels as _pick_channels  # noqa: E402
 
 
 # ---------------------------------------------------------------- helpers
@@ -61,69 +63,21 @@ def load_regions(manifest: Path) -> dict[str, str]:
 
 
 def pick_channels(ds) -> tuple[list[str], list[str]]:
-    missing = [v for v in SAR_REQUIRED if v not in ds]
-    if missing:
-        sys.exit(f"missing SAR variables {missing}; SAR-grid variables present: "
-                 f"{[v for v in ds.data_vars if ds[v].dims == SAR_DIMS]}")
-    sar = list(SAR_REQUIRED)
-    inc = [v for v in ds.data_vars
-           if "incidence" in v.lower() and ds[v].dims == SAR_DIMS]
-    sar += inc[:1]
-    amsr = sorted(v for v in ds.data_vars
-                  if v.startswith("btemp") and ds[v].dims == AMSR_DIMS)
-    if not amsr:
-        sys.exit("no btemp_* variables on the 2 km grid; 2 km variables present: "
-                 f"{[v for v in ds.data_vars if ds[v].dims == AMSR_DIMS]}")
-    return sar, amsr
-
-
-def block_mean(a: np.ndarray, f: int) -> np.ndarray:
-    h, w = a.shape[0] // f * f, a.shape[1] // f * f
-    return a[:h, :w].reshape(h // f, f, w // f, f).mean(axis=(1, 3), dtype=np.float32)
-
-
-def block_centre(a: np.ndarray, f: int) -> np.ndarray:
-    h, w = a.shape[0] // f * f, a.shape[1] // f * f
-    return a[f // 2:h:f, f // 2:w:f]
-
-
-def amsr_to_grid(a: np.ndarray, out_hw: tuple[int, int], f: int,
-                 centre: float) -> np.ndarray:
-    """Bilinear resample (C, h, w) AMSR onto the downsampled SAR grid.
-
-    Output pixel i is centred at SAR pixel i*f + (f-1)/2; AMSR cell k at
-    SAR pixel k*25 + centre. Positions outside the AMSR grid are clamped.
-    """
-    def axis(n_out: int, n_in: int):
-        pos = (np.arange(n_out) * f + (f - 1) / 2 - centre) / AMSR_SPACING
-        pos = np.clip(pos, 0, n_in - 1)
-        i0 = np.floor(pos).astype(np.int64)
-        i1 = np.minimum(i0 + 1, n_in - 1)
-        return i0, i1, (pos - i0).astype(np.float32)
-
-    y0, y1, wy = axis(out_hw[0], a.shape[1])
-    x0, x1, wx = axis(out_hw[1], a.shape[2])
-    wy, wx = wy[None, :, None], wx[None, None, :]
-    top = a[:, y0][:, :, x0] * (1 - wx) + a[:, y0][:, :, x1] * wx
-    bot = a[:, y1][:, :, x0] * (1 - wx) + a[:, y1][:, :, x1] * wx
-    return (top * (1 - wy) + bot * wy).astype(np.float32)
+    try:
+        return _pick_channels(ds)
+    except ValueError as e:
+        sys.exit(str(e))
 
 
 def build_scene(path: Path, sar_vars, amsr_vars, f: int, centre: float):
     """Return x (C, H, W) float32 un-normalised, y (3, H, W) uint8."""
-    ds = xr.open_dataset(path, mask_and_scale=False)
+    ds = open_scene(path)
     try:
-        sar = [block_mean(np.asarray(ds[v].values, dtype=np.float32), f)
-               for v in sar_vars]
-        hw = sar[0].shape
-        amsr = np.stack([np.asarray(ds[v].values, dtype=np.float32) for v in amsr_vars])
-        amsr = amsr_to_grid(amsr, hw, f, centre)
-        y = np.stack([block_centre(np.asarray(ds[l].values).astype(np.uint8), f)
-                      for l in LABELS])
+        x = scene_inputs(ds, list(sar_vars) + list(amsr_vars), f, centre)
+        y = scene_labels(ds, f)
     finally:
         ds.close()
-    x = np.concatenate([np.stack(sar), amsr], axis=0)
-    assert y.shape[1:] == hw, (y.shape, hw)
+    assert y.shape[1:] == x.shape[1:], (y.shape, x.shape)
     return x, y
 
 
@@ -206,13 +160,12 @@ def main() -> int:
     # ---- pass 2: write every scene ----
     (out / "x").mkdir(parents=True, exist_ok=True)
     (out / "y").mkdir(parents=True, exist_ok=True)
-    mu, sd = mean[:, None, None].astype(np.float32), std[:, None, None].astype(np.float32)
     scenes = []
     t0 = time.time()
     for i, p in enumerate(files, 1):
         x, y = build_scene(p, sar_vars, amsr_vars, args.factor, args.amsr_center)
         n_nan = int(np.isnan(x).sum())
-        xn = np.nan_to_num((x - mu) / sd, nan=0.0).astype(np.float16)
+        xn = normalise(x, mean, std)
         stem = p.name[:-3]
         atomic_save(out / "x" / f"{stem}.npy", xn)
         atomic_save(out / "y" / f"{stem}.npy", y)

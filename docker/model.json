@@ -1,0 +1,6 @@
+{
+ "url": "https://github.com/reddytian/sea-ice-segmentation/releases/download/v0.2.0/seaice_unet_r2.pt",
+ "sha256": "e1c2b65ad1199392055bbc1d72bce64a43eea1c61084dac3a9af06485c20a952",
+ "release": "v0.2.0",
+ "run": "unet_r2"
+}
