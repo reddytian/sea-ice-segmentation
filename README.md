@@ -11,7 +11,8 @@ split chosen from the data, a floor baseline next to every score, metrics that r
 ice charts are made, and experiments whose predictions were written down before they ran
 -- including two that turned out wrong. It also ships as a command-line tool and a container
 that turn a scene into georeferenced maps, checked to reproduce the evaluated model exactly
-([Inference](#inference-from-a-scene-to-a-map)).
+([Inference](#inference-from-a-scene-to-a-map)), and as a serverless pipeline on AWS where a
+scene dropped into S3 comes back as maps ([Deployment](#serverless-deployment-on-aws)).
 
 ![AutoICE score vs domain-aware score on the test regions](docs/figures/metric_vs_floor.png)
 
@@ -318,6 +319,69 @@ land:
   and 1.0 km along the sample axis from their best fit (n = 37, ± 0.1 km). The cause is not identified, so no
   correction is applied.
 
+## Serverless deployment on AWS
+
+`deploy/aws/` runs the same container on AWS Lambda. A scene uploaded to S3 triggers
+inference, and the maps are written back to the same bucket:
+
+```
+s3://BUCKET/incoming/SCENE.nc --(S3 event)--> Lambda (arm64, container image from ECR)
+  --> s3://BUCKET/predictions/SCENE/SCENE_{SIC,SOD,FLOE}.tif + SCENE.json
+```
+
+```bash
+aws configure                              # an IAM user's access key, not the root account
+./deploy/aws/deploy.sh you@example.com     # build the arm64 image, push to ECR, deploy the stack
+./deploy/aws/run_example.sh SCENE.nc       # upload, wait, download the maps, print timings
+./deploy/aws/teardown.sh                   # delete everything, including the images
+```
+
+One CloudFormation stack (`deploy/aws/template.yaml`) holds:
+
+- the function;
+- the bucket: public access blocked, objects deleted after 30 days;
+- a role that can only read `incoming/` and write `predictions/`;
+- logs kept for 14 days;
+- an e-mail alert on a $20 monthly budget.
+
+The trigger fires only on `incoming/*.nc`, so the function cannot trigger itself. A scene that
+fails writes `predictions/SCENE/ERROR.json`, and the other scenes in the batch still run.
+Before anything is deployed, `deploy/aws/local_check.py` runs the handler inside the image
+under Lambda's constraints: a read-only file system with only `/tmp` writable, and an
+arbitrary non-root user.
+
+Measured in us-east-2 on 2026-11-03 at 3008 MB, which gives about 1.7 Graviton vCPUs. Times
+are Lambda's billed duration:
+
+| | 137 MB scene | 195 MB scene (largest in AI4Arctic) |
+|---|---|---|
+| first invocation after deploying a new image | 126 s | not measured |
+| cold start, image already cached | not measured | 28-29 s |
+| warm container | 18 s | 25 s |
+| peak memory (Lambda's "Max Memory Used") | 2458-2601 MB | 2671-2805 MB |
+
+- **Same maps as the CLI.** For both scenes, the maps made in Lambda match the CLI's output on
+  a laptop in every pixel and on the same grid: all six rasters.
+- **The model step dominates.** In a warm container the largest scene spends 19 s in the
+  model and 2 s each on preprocessing and warping. More memory would buy more CPU, but new
+  accounts are often capped at 3008 MB, so that is the default; `MEMORY_MB` overrides it.
+- **Only the first start after a deploy is slow.** Lambda loads a new image on demand. On the
+  first invocation, imports took 47 s, loading the model 10 s, and the scene 65 s, against 18 s
+  warm. Once the image is cached, a cold start adds 3-4 s.
+- **Imports wait for the first invocation.** At module level, the torch import ran past
+  Lambda's 10 s limit for the init phase, and Lambda then repeats the whole init. A test now
+  fails if the handler module imports torch or rasterio.
+- **Memory levels off.** Five back-to-back runs of the largest scene in one container peaked at
+  2682, 2797, 2802, 2804 and 2805 MB. That is enough for every AI4Arctic scene with about
+  200 MB to spare. A larger input would need more memory, after a quota increase.
+- **Cost.** At AWS's published Arm rate ($0.0000133334 per GB-second), a warm scene costs
+  about $0.001 and the first invocation after a deploy about $0.005. While idle, the stack
+  costs only the ECR image storage.
+
+Lambda suits scenes that arrive a few at a time: nothing runs between them and there is no
+server to manage. It is the wrong tool for reprocessing an archive. There, ~25 s of CPU per
+scene points to a GPU batch job (AWS Batch or ECS).
+
 ## Limitations
 
 - One random seed per configuration; three test regions. Differences below ~0.03 sel90
@@ -339,7 +403,7 @@ land:
 
 ## Tests
 
-`pytest -q` runs 26 tests on synthetic data in a few seconds, on CPU, and in CI on every
+`pytest -q` runs 31 tests on synthetic data in under a minute, on CPU, and in CI on every
 push. They pin down the properties the results depend on: evaluation tiles cover every
 pixel exactly once; flips and rotations keep inputs and labels aligned; AMSR2 is resampled
 at a fixed 25-pixel spacing rather than stretched; masked cross-entropy is exact zero (not
@@ -347,10 +411,13 @@ NaN) on an unlabelled batch; the metrics match direct computation; the leakage-B
 differ only in the swapped scenes. For inference: the CLI's tiling reproduces the evaluation
 path pixel for pixel; georeferencing a synthetic curved swath stays within 1 px with no
 systematic shift; the grid layout matches real scene shapes; outputs are COGs with no data
-over land and outside the swath; the model bundle loads with `weights_only=True`. Each of these fails
+over land and outside the swath; the model bundle loads with `weights_only=True`. For the
+Lambda handler, with S3 faked by local folders: a scene in `incoming/` becomes COGs in
+`predictions/`, `/tmp` is cleaned up, a broken scene is reported without stopping the batch,
+and the handler module imports neither torch nor rasterio. Each of these fails
 when broken on purpose: rotation, AMSR2 mapping, tile padding, evenly spaced grid rows,
 trusting the dimension names, reversed axes, a polynomial warp, a half-pixel offset, a missing
-land mask.
+land mask, torch imported at module level.
 
 ## Reproduce
 
@@ -385,12 +452,14 @@ python scripts/map_figure.py predictions/
 ```
 src/seaice/   data.py (crops, tiles, class weights)  model.py  losses.py  metrics.py  engine.py
               preprocess.py (shared by cache and CLI)  georef.py  predict.py (seaice-predict)
+              aws_lambda.py (S3-triggered Lambda handler)
 scripts/      corpus_stats  make_split  build_cache  check_data  train  evaluate
               diagnose_val  compare_runs  make_random_split  make_leak_split  make_figures
               predict_maps  inspect_scene  check_geolocation  export_model  check_parity
               map_figure
 configs/      split files (region, random, leakage B)
 docker/       model download + checksum (model.json written by export_model.py)
+deploy/aws/   CloudFormation stack, deploy / run_example / teardown scripts, local Lambda check
 tests/        pytest suite on synthetic data (no download needed)
 docs/         figures, geolocation and parity evidence
 ```
