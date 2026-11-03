@@ -43,15 +43,16 @@ class FolderS3:
 
 def main() -> int:
     t0 = time.time()
-    from seaice import aws_lambda                        # import cost is part of a cold start
-    t_import = time.time() - t0
+    from seaice import aws_lambda                        # Lambda's init phase: must stay light
+    t_init = time.time() - t0
     aws_lambda._state["s3"] = FolderS3()
     event = {"Records": [{"eventSource": "aws:s3",
                           "s3": {"bucket": {"name": "local"}, "object": {"key": f"incoming/{name}"}}}
                          for name in sys.argv[1:]]}
     t1 = time.time()
     out = aws_lambda.handler(event)
-    print(f"cold start: import {t_import:.1f} s, model load {out['model_load_s']} s; "
+    print(f"init {t_init:.1f} s; cold start in handler: import {out['import_s']} s, "
+          f"model load {out['model_load_s']} s; "
           f"handler {time.time() - t1:.1f} s for {len(sys.argv) - 1} scene(s); uid {os.getuid()}")
     written = sorted(str(p.relative_to(OUT)) for p in OUT.rglob("*") if p.is_file())
     print("written:", json.dumps(written, indent=1))

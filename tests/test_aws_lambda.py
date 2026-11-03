@@ -70,6 +70,28 @@ def test_bad_scene_is_reported_and_does_not_stop_the_batch(lambda_env):
     assert err["scene"] == "incoming/broken.nc" and err["error"]
 
 
+def test_module_import_stays_within_lambda_init_budget():
+    """Lambda caps the init phase (module import) at 10 s; importing torch there timed
+    out on the first deployment. The handler module must not pull in torch or rasterio."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    src = str(Path(aws_lambda.__file__).resolve().parents[1])
+    code = "import sys, seaice.aws_lambda; print(sorted({'torch', 'rasterio'} & set(sys.modules)))"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
+                         env={**os.environ, "PYTHONPATH": src})
+    assert out.stdout.strip() == "[]", out.stdout
+
+
+def test_cold_start_is_reported_once(lambda_env):
+    fake_scene.write(lambda_env / "incoming" / "a.nc")
+    first = aws_lambda.handler(_event("incoming/a.nc"))
+    second = aws_lambda.handler(_event("incoming/a.nc"))
+    assert first["cold_start"] is True and second["cold_start"] is False
+    assert first["import_s"] is not None and first["model_load_s"] is not None
+
+
 def test_url_encoded_keys_are_decoded(lambda_env):
     fake_scene.write(lambda_env / "incoming" / "scene with space.nc")
     out = aws_lambda.handler(_event("incoming/scene+with+space.nc"))
