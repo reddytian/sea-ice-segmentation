@@ -18,6 +18,16 @@ Parameters:
     Type: Number
     Default: 30
     Description: Every object in the bucket is deleted this many days after upload.
+  MemoryMB:
+    Type: Number
+    Default: 3008
+    MinValue: 2560
+    MaxValue: 10240
+    Description: >-
+      Lambda memory in MB (also sets the CPU share). Peak RSS of seaice-predict measured
+      at 2079-2311 MiB per scene (2311 on the largest AI4Arctic scene). New AWS accounts
+      are often capped at 3008 MB until a quota increase; above that, more memory only
+      buys CPU.
 
 Resources:
   FunctionRole:
@@ -50,7 +60,7 @@ Resources:
       PackageType: Image
       Code: { ImageUri: !Ref ImageUri }
       Architectures: [arm64]
-      MemorySize: 4096            # also sets the CPU share; a scene needs ~2-3 GB
+      MemorySize: !Ref MemoryMB
       Timeout: 300                # a scene takes ~10 s; cold start adds model loading
       EphemeralStorage: { Size: 4096 }   # /tmp holds one scene at a time
       Role: !GetAtt FunctionRole.Arn

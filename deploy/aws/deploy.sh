@@ -5,10 +5,12 @@
 #
 # Needs: Docker, AWS CLI v2 with credentials (aws configure). Region: $AWS_REGION, else
 # the CLI's configured region, else us-east-2. Re-running redeploys the current commit.
+# Lambda memory: $MEMORY_MB, default 3008 (the cap on new accounts; a scene peaks at 2311 MiB).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 EMAIL=${1:?usage: deploy/aws/deploy.sh ALERT_EMAIL}
+MEMORY_MB=${MEMORY_MB:-3008}
 REGION=${AWS_REGION:-$(aws configure get region || true)}
 REGION=${REGION:-us-east-2}
 STACK=${STACK:-seaice-predict}
@@ -16,7 +18,7 @@ REPO=${REPO:-seaice-predict}
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 REGISTRY="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
 TAG="$(git rev-parse --short HEAD)$(git diff --quiet HEAD -- src Dockerfile docker || echo -dirty)"
-echo "account $ACCOUNT  region $REGION  stack $STACK  image $REPO:$TAG"
+echo "account $ACCOUNT  region $REGION  stack $STACK  image $REPO:$TAG  memory ${MEMORY_MB} MB"
 
 # --- ECR repository (scan on push; keep only the 3 newest images)
 if ! aws ecr describe-repositories --repository-names "$REPO" --region "$REGION" >/dev/null 2>&1; then
@@ -55,7 +57,8 @@ if [[ "$STATUS" == ROLLBACK_COMPLETE ]]; then
 fi
 aws cloudformation deploy --region "$REGION" --stack-name "$STACK" \
   --template-file deploy/aws/template.yaml --capabilities CAPABILITY_IAM \
-  --parameter-overrides ImageUri="$IMAGE" AlertEmail="$EMAIL" --no-fail-on-empty-changeset
+  --parameter-overrides ImageUri="$IMAGE" AlertEmail="$EMAIL" MemoryMB="$MEMORY_MB" \
+  --no-fail-on-empty-changeset
 aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
   --query 'Stacks[0].Outputs' --output table
 echo "Confirm the AWS Budgets e-mail subscription if one arrives. Try it: deploy/aws/run_example.sh SCENE.nc"
